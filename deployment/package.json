@@ -1,0 +1,9 @@
+{
+  "name": "deployment",
+  "version": "1.0.0",
+  "description": "Deployment scripts folder",
+  "dependencies": {
+    "aws-sdk": "^2.918.0",
+    "minimist": "^1.2.5"
+  }
+}

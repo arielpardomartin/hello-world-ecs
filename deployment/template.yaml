@@ -1,0 +1,362 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: "AWS::Serverless-2016-10-31"
+Description: WS::Serverless-2016-10-31"
+Description: CloudFormation template for Hello World demo
+
+Parameters:
+
+  # ECS resources parameters
+  ECSClusterName:
+    Type: String
+    Description: Name of the ECS Cluster
+    Default: hello-world-demo-cluster
+
+  HelloWorldServiceName:
+    Type: String
+    Description: Name of the Hello World Service
+    Default: hello-world-demo-service
+
+  HelloWorldTaskDefinitionName:
+    Type: String
+    Description: Name of the Hello World Service task definition
+    Default: hello-world-demo-task-definition
+
+  HelloWorldContainerDefinitionName:
+    Type: String
+    Description: Name of the Hello World Service container definition
+    Default: hello-world-demo-container-definition
+
+  HelloWorldServiceLogGroupName:
+    Type: String
+    Description: Name of the Hello World Service CloudWatch log group
+    Default: /ecs/hello-world-demo-logs
+
+  ECRHelloWorldRepositoryName:
+    Type: String
+    Description: Name of the private DNS Namespace for the Hello World ECR repository
+    Default: hello-world-demo-images
+
+
+      
+Mappings:
+  SubnetConfig:
+    VPC:
+      CIDR: "24.0.0.0/16"
+    Subnet:
+      CIDR: "24.0.0.0/24"
+    Subnet2:
+      CIDR: "24.0.1.0/24"
+
+Resources:
+  ################################# ECS Resources
+  # VPC
+  VPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: !FindInMap ["SubnetConfig", "VPC", "CIDR"]
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+
+  Subnet:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: {Ref: 'AWS::Region'}
+      CidrBlock: !FindInMap ["SubnetConfig", "Subnet", "CIDR"]
+      MapPublicIpOnLaunch: true
+
+  Subnet2:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: {Ref: 'AWS::Region'}
+      CidrBlock: !FindInMap ["SubnetConfig", "Subnet2", "CIDR"]
+      MapPublicIpOnLaunch: true
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  Route:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref Subnet
+      RouteTableId: !Ref RouteTable
+  
+  Subnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref Subnet2
+      RouteTableId: !Ref RouteTable
+
+  #Load Balancer
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for loadbalancer
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Name: hello-world-lb
+      Scheme: internet-facing
+      Subnets:
+      - !Ref Subnet
+      - !Ref Subnet2
+      SecurityGroups:
+      - !Ref LoadBalancerSecurityGroup
+  
+  DefaultTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: aws-hello-world-default
+      VpcId: !Ref VPC
+      Protocol: HTTP
+      Port: 80
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+      - LoadBalancer
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref DefaultTargetGroup
+
+  ## Cluster
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref ECSClusterName
+
+  ## Security groups
+  HelloWorldServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for ECS Hello World Service
+      VpcId: !Ref VPC
+
+  HelloWorldLBSecurityGroupInboundHTTPRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt HelloWorldServiceSecurityGroup.GroupId
+      IpProtocol: -1
+      SourceSecurityGroupId: !GetAtt LoadBalancerSecurityGroup.GroupId
+
+  HelloWorldServiceSecurityGroupInboundHTTPRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt HelloWorldServiceSecurityGroup.GroupId
+      IpProtocol: -1
+      SourceSecurityGroupId: !GetAtt HelloWorldServiceSecurityGroup.GroupId
+
+  HelloWorldServiceSecurityGroupOutboundRule:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !GetAtt HelloWorldServiceSecurityGroup.GroupId
+      IpProtocol: -1
+      CidrIp: 0.0.0.0/0
+
+  ## Log groups
+  HelloWorldServiceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Ref HelloWorldServiceLogGroupName
+
+## Roles
+  ECSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ["sts:AssumeRole"]
+      Path: /
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  # Rules which allow ECS to attach network interfaces to instances
+                  # on your behalf in order for awsvpc networking mode to work right
+                  - "ec2:AttachNetworkInterface"
+                  - "ec2:CreateNetworkInterface"
+                  - "ec2:CreateNetworkInterfacePermission"
+                  - "ec2:DeleteNetworkInterface"
+                  - "ec2:DeleteNetworkInterfacePermission"
+                  - "ec2:Describe*"
+                  - "ec2:DetachNetworkInterface"
+                  #LB
+                  - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
+                  - 'elasticloadbalancing:DeregisterTargets'
+                  - 'elasticloadbalancing:Describe*'
+                  - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
+                  - 'elasticloadbalancing:RegisterTargets'
+                  # SSM
+                  - "ssmmessages:CreateControlChannel"
+                  - "ssmmessages:CreateDataChannel"
+                  - "ssmmessages:OpenControlChannel"
+                  - "ssmmessages:OpenDataChannel"
+                Resource: "*"
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ["sts:AssumeRole"]
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  # Allow the ECS Tasks to download images from ECR
+                  - "ecr:GetAuthorizationToken"
+                  - "ecr:BatchCheckLayerAvailability"
+                  - "ecr:GetDownloadUrlForLayer"
+                  - "ecr:BatchGetImage"
+
+                  # Allow the ECS tasks to upload logs to CloudWatch
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+
+  # LB Def
+  HelloWorldTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VPC
+      Name: !Ref HelloWorldServiceName
+      Port: 3000
+      Protocol: HTTP
+      TargetType: ip
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+
+  HelloWorldListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref LoadBalancerListener
+      Priority: 1
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /*
+      Actions:
+        - TargetGroupArn: !Ref HelloWorldTargetGroup
+          Type: forward
+  
+  ## Hello World Service
+  HelloWorldTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref HelloWorldTaskDefinitionName
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      ContainerDefinitions:
+        - Name: !Ref HelloWorldContainerDefinitionName
+          ReadonlyRootFilesystem: false # disabled
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRHelloWorldRepositoryName}:latest"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Sub "${AWS::Region}"
+              awslogs-group: !Ref HelloWorldServiceLogGroupName
+              awslogs-stream-prefix: ecs
+          PortMappings:
+            - ContainerPort: 80
+              HostPort: 80
+              Protocol: "tcp"
+            - ContainerPort: 3000
+              HostPort: 3000
+              Protocol: "tcp"
+          Cpu: 0
+      Memory: 512
+      TaskRoleArn: !GetAtt ECSRole.Arn
+      RequiresCompatibilities:
+        - FARGATE
+      NetworkMode: awsvpc
+      Cpu: 256
+
+  HelloWorldService:
+    Type: AWS::ECS::Service
+    DependsOn: HelloWorldListenerRule
+    Properties:
+      LaunchType: FARGATE
+      LoadBalancers:
+        - ContainerName: !Ref HelloWorldContainerDefinitionName
+          ContainerPort: 3000
+          TargetGroupArn: !Ref HelloWorldTargetGroup
+      EnableExecuteCommand: true
+      Cluster: !Ref ECSCluster
+      ServiceName: !Ref HelloWorldServiceName
+      TaskDefinition: !Ref HelloWorldTaskDefinition
+      DesiredCount: 1
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !Ref Subnet
+            - !Ref Subnet2
+          SecurityGroups:
+            - !Ref HelloWorldServiceSecurityGroup
+
+Outputs:
+  AWSRegion:
+    Value: !Ref AWS::Region
+
+  ClusterName:
+    Value: !Ref ECSClusterName
+
+  ServiceName:
+    Value: !Ref HelloWorldServiceName
+
+  ExternalUrl:
+    Value: !Join ['', ['http://', !GetAtt 'LoadBalancer.DNSName']]
