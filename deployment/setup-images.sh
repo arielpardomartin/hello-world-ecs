@@ -13,10 +13,10 @@ if [ $? != 0 ]; then exit 1; fi
 
 cd ../serverless
 
-# Build and push Stream service image
-printf "\n\nCreating image repository for Stream service...\n"
+# Build and push Hello World service image
+printf "\n\nCreating image repository for Hello World service...\n"
 aws ecr create-repository --repository-name $HELLO_WORLD_REPOSITORY_NAME
-printf "\n\nBuilding and pushing Stream service image...\n"
+printf "\n\nBuilding and pushing Hello World service image...\n"
 docker build -q -t $ECR_REGISTRY/$HELLO_WORLD_REPOSITORY_NAME:latest .
 docker push $ECR_REGISTRY/$HELLO_WORLD_REPOSITORY_NAME:latest
 if [ $? != 0 ]; then exit 1; fi

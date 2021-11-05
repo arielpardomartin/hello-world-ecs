@@ -30,7 +30,7 @@ const generateOutput = async () => {
         );
 
         const output = `
-        Amazon IVS Transcribe demo
+        Hello World demo
         * ExternalUrl = ${externalUrl}
         `;
         console.log('\x1b[33m%s\x1b[0m', output);
