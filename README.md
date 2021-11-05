@@ -17,7 +17,9 @@ Run `aws configure` to set your credentials and the region where you want the de
 
 ### 2) Run deployment script
 
-Run `bash deploy.sh`.
+Go to the **deployment** folder and run:
+
+`bash deploy.sh`.
 
 This will deploy the demo infrastructure in AWS and then perform the following configuration steps using the default configuration values included in this repo.
 
