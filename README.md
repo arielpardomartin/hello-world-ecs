@@ -25,6 +25,8 @@ This will deploy the demo infrastructure in AWS and then perform the following c
 
 At the end of the deploy.sh execution, you will see in the output in the console the **ExternalURL** to get access to the services.
 
+![output](output.png)
+
 ## Re-Deployment without outage
 
 Run `bash redeploy.sh`.
