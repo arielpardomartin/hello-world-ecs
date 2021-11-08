@@ -21,7 +21,7 @@ Go to the **deployment** folder and run:
 
 `bash deploy.sh`.
 
-This will deploy the demo infrastructure in AWS and then perform the following configuration steps using the default configuration values included in this repo.
+This will deploy the demo infrastructure in AWS.
 
 ## Usage
 
