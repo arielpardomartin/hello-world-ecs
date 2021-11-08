@@ -37,3 +37,4 @@ This will redeploy a service without outage, asking for two variables:
 - ClusterName
 - ServiceName
 
+This script is usefull when you need to update your ECS container service without outage
